@@ -1,0 +1,272 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Created on Wed Mar  4 12:06:38 2020
+
+@author: obelmouk
+"""
+def chunkAnalysispcap(chunk):
+    
+    strList=np.array(chunk.split("|"))
+    chunkList=[]
+    chunk_start_timelis=[]
+    chunk_dl_dur=[]
+    chunk_delta=[]
+    numberOfVideoChunkRequests=0
+    arrVideoDeltas=[]
+    
+    arrVideoChunkSizes=[]
+    
+    arrVideoChunkDurs=[]
+    
+
+#1580305366735.638,r5---sn-4g5ednse.googlevideo.com,7,video/webm,244,219410-438177,0,1031,REQ,video,65.923095703125
+    
+    #|1938157.0,12.3383948802948,0.6340270042419434,2.865554094314575|
+    for s in strList:
+        ss=s.split(",")
+        if len(ss)==4:######### NEED TO CHECK IF ANY MODIFICATION IS DONE #########
+            #range=ss[RANGE].split("-")
+            #print "range",range
+            chunkList.append(ss[0])
+            chunk_start_timelis.append(ss[1])
+            chunk_dl_dur.append(ss[2])
+            chunk_delta.append(ss[3])
+            #print len(ss)
+            
+    chunkList=np.array(chunkList)
+    chunk_start_timelis=np.array(chunk_start_timelis)
+    numberOfVideoChunkRequests=len(chunkList)
+    arrVideoChunkSizes=chunkList
+    arrVideoChunkDurs=np.array(chunk_dl_dur)
+    nVideoStart=chunk_start_timelis
+    arrVideoDeltas=np.array(chunk_delta)
+    return [numberOfVideoChunkRequests,
+            
+            arrVideoChunkSizes,
+            
+            arrVideoChunkDurs,
+            
+            arrVideoDeltas,
+            nVideoStart]
+
+
+def chunkAnalysisHTTP(chunk,joinTime=0,ts=0):
+    REQUESTID=7
+    TIMESTAMP=0
+    STATUSCODE=8
+    RANGE=5
+    strList=np.array(chunk.split("|"))
+    chunkList=[]
+    requestids=[]
+    timestamps=[]
+    completedReqs=[]
+    numberOfVideoChunkRequests=0
+    numberOfAudioChunkRequests=0
+    numberOfRequests=0
+    numberOfAudioChunks=0
+    numberOfVideoChunks=0
+    arrVideoChunkSizes=[]
+    arrAudioChunkSizes=[]
+    arrVideoChunkDurs=[]
+    arrAudioChunkDurs=[]
+
+    for s in strList:
+        ss=s.split(",")
+        if len(ss)==11:######### NEED TO CHECK IF ANY MODIFICATION IS DONE #########
+            range=ss[RANGE].split("-")
+          
+            chunkList.append(ss+[int(range[1])-int(range[0])])
+            
+            
+    chunkList=np.array(chunkList)
+    numberOfVideoChunkRequests=len(chunkList[chunkList[:,9]=="video"])
+    numberOfAudioChunkRequests=len(chunkList[chunkList[:,9]=="audio"])
+    numberOfRequests=len(chunkList)
+    beforeCount=chunkList.shape[0]
+
+    ranges=chunkList[:,RANGE][::-1]#reverse the items to get last unique element
+    chunkList= chunkList[::-1]
+    chunkList=chunkList[np.unique(ranges,return_index=True)[1]]
+    chunkList=chunkList[chunkList[:,0].argsort()]
+
+    MissedReqCount=beforeCount-chunkList.shape[0]
+    arrVideo=chunkList[chunkList[:,9]=="video"]
+    arrVideoChunkSizes=arrVideo[:,11].astype(int)
+    arrVideoChunkDurs=arrVideo[:,10].astype(float)
+    arrVideoItags=arrVideo[:,4]
+    arrAudio=chunkList[chunkList[:,9]=="audio"]
+    arrAudioChunkSizes=arrAudio[:,11].astype(int)
+    arrAudioChunkDurs=arrAudio[:,10].astype(float)
+    numberOfVideoChunks=len(chunkList[chunkList[:,9]=="video"])
+    numberOfAudioChunks=len(chunkList[chunkList[:,9]=="audio"])
+
+    cV=chunkList[chunkList[:,9]=="audio"]
+    DLDurV=cV[:,10].astype(float)
+    tsV=cV[:,0].astype(float)
+    ts_endV=tsV+DLDurV
+    nAudioStart=len(ts_endV[ts_endV<(ts+joinTime)])
+    cV=chunkList[chunkList[:,9]=="video"]
+    DLDurV=cV[:,10].astype(float)
+    tsV=cV[:,0].astype(float)
+    ts_endV=tsV+DLDurV
+    nVideoStart=len(ts_endV[ts_endV<(ts+joinTime)])
+   
+    return [numberOfVideoChunkRequests,
+            numberOfAudioChunkRequests,
+            numberOfRequests,
+            numberOfVideoChunks,
+            numberOfAudioChunks,
+            arrVideoChunkSizes,
+            arrAudioChunkSizes,
+            arrVideoChunkDurs,
+            arrAudioChunkDurs,
+            arrVideoItags,
+            MissedReqCount,
+            nAudioStart,
+            nVideoStart]
+
+def tpAnalysispcap(pcapstat):
+    
+    strList=np.array(pcapstat.split(","))
+    return strList[0],strList[1],strList[2],strList[3],strList[4],strList[5],strList[6],strList[7],strList[8],strList[9],strList[10],strList[11]
+
+
+from pymongo import MongoClient
+import numpy as np
+import pandas as pd
+import numpy as np
+
+mongoDBclient = MongoClient('localhost', 27017)
+db = mongoDBclient.videoInfo
+#datasetMongo =db["datasetAL_Par_QoE_ITU11_DT_minSampLeaf_"+str(minSamplesLeaf)]
+datasetMongo =db["datasetYouTube_crypted"]
+#dbCatalog = db["videoInfo"]
+c=0
+pcap_nofilter=[]
+http_nofilter=[]
+pcap_filtered=[]
+http_filtered=[]
+http_audio_nofilter=[]
+http_video_nofilter=[]
+print(datasetMongo.find().count())
+for d in datasetMongo.find():
+   # print((chunkAnalysispcap(d['chunkInfoPcap'])[1]))
+    
+
+    try:
+        #print(chunkAnalysisHTTP(d['httpInfo'])[5])
+        #chunkAnalysispcap(d['chunkInfoPcap'])[1]:
+        
+        for (x,y) in zip(chunkAnalysispcap(d['chunkInfoPcap'])[1],chunkAnalysispcap(d['chunkInfoPcap'])[2]):
+            pcap_info=[]#every entry
+            if float(x) != 0:
+                pcap_info.append(d['videoID'])
+                pcap_info.append(d['view_port'][:-1])
+                pcap_info.append(d['dur'])
+                pcap_info.append(float(x))#chunk size
+                
+                pcap_info.append(float(y))#chunk download time
+                for i in range(12):
+                
+                    pcap_info.append(float(tpAnalysispcap(d['pcapStats'])[i]))
+                pcap_nofilter.append(pcap_info)
+                #http info get audio + video sizez 
+        for (x,y) in zip(list(chunkAnalysisHTTP(d['httpInfo'])[5])+(list(chunkAnalysisHTTP(d['httpInfo'])[6])),
+                         list(chunkAnalysisHTTP(d['httpInfo'])[7])+(list(chunkAnalysisHTTP(d['httpInfo'])[8]))):
+            http_audio_video=[]
+            if float(x) != 0:
+                http_audio_video.append(d['videoID'])
+                http_audio_video.append(d['view_port'][:-1])
+                http_audio_video.append(d['dur'])
+                http_audio_video.append(float(x))#chunk size
+                
+                http_audio_video.append(float(y))#chunk download time
+                http_nofilter.append(http_audio_video)
+
+                
+        #### matching and filtering 
+
+        l= [float(x) for x in (chunkAnalysispcap(d['chunkInfoPcap'])[1])]
+        l1= [float(x) for x in chunkAnalysispcap(d['chunkInfoPcap'])[2]] 
+        for elm in list(chunkAnalysisHTTP(d['httpInfo'])[5])+(list(chunkAnalysisHTTP(d['httpInfo'])[6])):
+            chunk_http=[]
+            chunk_pcap=[]
+            array = np.array(l)
+            array_download_time = np.array(l1)
+            idx = (np.abs(array - elm)).argmin()
+            match = l.pop(idx)
+            match_downloadtime = l1.pop(idx)
+            #print(match)
+            
+            chunk_http.append(d['videoID'])
+            chunk_http.append(d['view_port'][:-1])
+            chunk_http.append(d['dur'])
+            chunk_http.append(elm)
+            chunk_http.append(match)
+            http_filtered.append(chunk_http)
+            
+            
+            chunk_pcap.append(d['videoID'])
+            chunk_pcap.append(d['view_port'][:-1])
+            chunk_pcap.append(d['dur'])
+            chunk_pcap.append(match)
+            chunk_pcap.append(match_downloadtime)
+            
+            for i in range(12):
+                
+                chunk_pcap.append(float(tpAnalysispcap(d['pcapStats'])[i]))
+            
+            pcap_filtered.append(chunk_pcap)
+            
+        ##http info get audio alone
+        for (x,y) in zip((list(chunkAnalysisHTTP(d['httpInfo'])[6])),
+                         (list(chunkAnalysisHTTP(d['httpInfo'])[8]))):
+            http_audio=[]
+            if float(x) != 0:
+                http_audio.append(d['videoID'])
+                http_audio.append(d['view_port'][:-1])
+                http_audio.append(d['dur'])
+                http_audio.append(float(x))#chunk size
+                
+                http_audio.append(float(y))#chunk download time
+                http_audio_nofilter.append(http_audio)
+                #http info get video info
+        for (x,y) in zip(list(chunkAnalysisHTTP(d['httpInfo'])[5]),
+                         list(chunkAnalysisHTTP(d['httpInfo'])[7])):
+            http_video=[]
+            if float(x) != 0:
+                http_video.append(d['videoID'])
+                http_video.append(d['view_port'][:-1])
+                http_video.append(d['dur'])
+                http_video.append(float(x))#chunk size
+                
+                http_video.append(float(y))#chunk download time
+                http_video_nofilter.append(http_video)
+                
+            
+        
+       
+    except Exception as e:
+            
+            pass
+
+        
+dataframe_http_audio_video = pd.DataFrame(http_nofilter, columns = 
+                    ['videoID', 'viewport', 'duration', 'chunk_size','dur'])
+
+dataframe_pcap_all = pd.DataFrame(pcap_nofilter, columns = 
+                    ['videoID', 'viewport', 'duration', 'chunk_size','download',
+                    'avg_dltp','avg_ult','avg_dlt','avg_dlpkt',
+                    'max_dltp','max_ult','max_dlt','max_dlpkt',
+                    'std_dltp','std_ult','std_dlt','std_dlpkt'])
+dataframe_http_audio = pd.DataFrame(http_audio_nofilter, columns = 
+                    ['videoID', 'viewport', 'duration', 'chunk_size','dur'])
+
+dataframe_http_video = pd.DataFrame(http_video_nofilter, columns = 
+                    ['videoID', 'viewport', 'duration', 'chunk_size','dur'])
+dataframe_pcap_filtered = pd.DataFrame(pcap_filtered, columns = 
+                    ['videoID', 'viewport', 'duration', 'chunk_size','download',
+                    'avg_dltp','avg_ult','avg_dlt','avg_dlpkt',
+                    'max_dltp','max_ult','max_dlt','max_dlpkt',
+                    'std_dltp','std_ult','std_dlt','std_dlpkt'])
